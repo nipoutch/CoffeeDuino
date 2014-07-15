@@ -6,17 +6,16 @@
 #include <EEPROMex.h>
 
 #define WHITE 0x7
-// coucou
+
 #define LoadCellRead ads.readADC_SingleEnded(1)
 
-#define ReadSW1 PINC & (1 << DDC0) //digitalRead(4);
-#define ReadSW2 PIND & (1 << DDD5)
-#define ReadSW3 PIND & (1 << DDD6)
-#define ReadSW4 PIND & (1 << DDD3)
-#define ReadSW5 PIND & (1 << DDD4)
-#define ReadSW6 PIND & (1 << DDD7)
-
-
+#define ReadSW1 PINC & (1 << DDC0) //digitalRead(A0);
+#define ReadSW2 PIND & (1 << DDD5) //digitalRead(5);
+#define ReadSW3 PIND & (1 << DDD6) //digitalRead(6);
+#define ReadSW4 PIND & (1 << DDD3) //digitalRead(6); => int1 arduino
+#define ReadSW5 PIND & (1 << DDD4) //digitalRead(4);
+#define ReadSW6 PIND & (1 << DDD7) //digitalRead(7);
+	
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 Adafruit_ADS1115 ads;
@@ -26,7 +25,7 @@ uint16_t timeBetweenReadings = 1000; //temps entre 2 pesées
 
 
 float Uav ;
-int CAN ;
+uint16_t CAN ;
 uint8_t Boucle_Lecture_Analog = 25; // nombre de lecture de l'entrée analogique
 float load = 0;;
 
@@ -35,11 +34,12 @@ volatile uint8_t menu = 0; //valeur du menu à afficher
 float timer = 10.0; // valeur du timer
 float poids = 10.0; // valeur du poids
 
-uint16_t init_tare; //tare
+uint16_t init_tare; 
 uint16_t capteur_poids = 0;
 
 volatile boolean start = false;
 volatile boolean Count = false;
+volatile uint8_t StopByInterrupt = false ;
 
 //variable du timer
 char dixieme_remain = 0;
@@ -87,9 +87,7 @@ uint8_t InterAccelValue_2 = Inter_init/8;
 uint8_t InterAccelValue_3 = Inter_init/16;
 uint8_t InterAccelValue_4 = Inter_init/64;
 
-volatile uint8_t StopByInterrupt = false ;
 
-boolean validepoids = false;
 boolean SW2andSW3 = false;
 
 uint16_t TimeLock = 1500;
@@ -135,7 +133,6 @@ void setup()
 	//PORTB bit0 => pinMode(8, OUTPUT) => 3WAY ____ PORTB bit1 => pinMode(9, OUTPUT) => PUMP ____ PORTB bit2 => pinMode(10, OUTPUT)
 	DDRB |= (1 << DDB0) | (1 << DDB1) | (1 << DDB2);
 	// interruption permettant de sortir de la boucle de décompte de temps
-	//attachInterrupt(1, stop, RISING );
 	attachInterrupt(1, stop, FALLING );
 	ads.setGain(GAIN_ONE); // 1x gain +/- 4.096V  1 bit = 0.125mV
 	ads.begin(); // initialisation du ADC
@@ -143,10 +140,6 @@ void setup()
 	lcd.setBacklight(WHITE);
 	lcd.backlight();
 	init_tare = tare();
-	
-	
-	
-	
 	
 }
 
@@ -695,6 +688,13 @@ void affiche_temps(int colonne, int ligne)
 	lcd.print(tmp);
 	if(secondes_remain < 100){lcd.setCursor(colonne + 4,ligne);lcd.print(" ");}
 }
+
+
+**********************************************************
+**														**
+**  INTERRUPT FONCTION ON PIND3 => arduino pin 3 (int1)	**
+**														**
+**********************************************************
 
 void stop()
 {
