@@ -6,8 +6,9 @@
 #include <EEPROMex.h>
 
 #define WHITE 0x7
-
+// coucou
 #define LoadCellRead ads.readADC_SingleEnded(1)
+
 #define ReadSW1 PINC & (1 << DDC0) //digitalRead(4);
 #define ReadSW2 PIND & (1 << DDD5)
 #define ReadSW3 PIND & (1 << DDD6)
@@ -20,14 +21,13 @@ LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 Adafruit_ADS1115 ads;
 
-
 long time = 0; // interval de lecture du capteur
 uint16_t timeBetweenReadings = 1000; //temps entre 2 pesées
 
 
 float Uav ;
 int CAN ;
-int Boucle_Lecture_Analog = 25; // nombre de lecture de l'entrée analogique
+uint8_t Boucle_Lecture_Analog = 25; // nombre de lecture de l'entrée analogique
 float load = 0;;
 
 
