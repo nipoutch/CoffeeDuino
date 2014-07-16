@@ -15,7 +15,7 @@
 #define ReadSW4 PIND & (1 << DDD3) //digitalRead(6); => int1 arduino
 #define ReadSW5 PIND & (1 << DDD4) //digitalRead(4);
 #define ReadSW6 PIND & (1 << DDD7) //digitalRead(7);
-	
+
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 Adafruit_ADS1115 ads;
@@ -34,7 +34,7 @@ volatile uint8_t menu = 0; //valeur du menu à afficher
 float timer = 10.0; // valeur du timer
 float poids = 10.0; // valeur du poids
 
-uint16_t init_tare; 
+uint16_t init_tare;
 uint16_t capteur_poids = 0;
 
 volatile boolean start = false;
@@ -97,7 +97,7 @@ float PreviousLoad = load;
 float PreviousTimer = time;
 
 boolean PreviousStart = false;
-
+boolean ExecuteOnce = false;
 
 void setup()
 {
@@ -169,7 +169,7 @@ void loop()
 			lcd.setCursor(5, 0);
 			dtostrf(poids, 4, 1, char_temp);
 			lcd.print(char_temp);
-			lcd.setCursor(10, 0); 
+			lcd.setCursor(10, 0);
 			dtostrf(load, 6, 2, char_temp);
 			lcd.print(char_temp);
 			PreviousPoids = poids;
@@ -307,7 +307,7 @@ void loop()
 			
 			
 			
-		lcd.setCursor(3, 1); lcd.print("             ");
+			lcd.setCursor(3, 1); lcd.print("             ");
 		}
 		break;
 		// fonction timer
@@ -386,7 +386,7 @@ void loop()
 		}
 		break;
 		//fonction manuel
-		case 2: 
+		case 2:
 		
 		if(FirstLoop == true )
 		{
@@ -397,29 +397,32 @@ void loop()
 			PORTB &= ~(1 << PIN0);
 			lcd.setCursor(0,0);
 			lcd.print("Manuel");
+			ExecuteOnce = true;
 			FirstLoop = false;
 		}
-		
-		
-		
 		if(start == true)
 		{
 			if(PreviousStart != start)
 			{
-			lcd.setCursor(0,1);
-			lcd.print("ON ");
-			PORTB |= (1 << PIN0);//digitalWrite(commande_relais, HIGH);
-			PreviousStart = start;
+				lcd.setCursor(0,1);
+				lcd.print("ON ");
+				PORTB |= (1 << PIN0);//digitalWrite(commande_relais, HIGH);
+				PreviousStart = start;
 			}
-			if(millis() - PressLT > TimeLock){lcd.setCursor(3,1); lcd.print("Lock");}
+			if(millis() - PressLT > TimeLock && ExecuteOnce)
+			{
+				lcd.setCursor(3,1);
+				lcd.print("Lock");
+				ExecuteOnce = false;
+			}
 		}
-		
 		else if(start == false && PreviousStart != start)
 		{
 			lcd.setCursor(0,1);
 			lcd.print("OFF    ");
 			PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
 			PreviousStart = start;
+			ExecuteOnce = true;
 		}
 		
 		break;
@@ -458,14 +461,20 @@ void loop()
 		// default is optional
 		
 	}
+	
+	
+	
 	Serial.println(millis()-debut);
-	//lecture de l'état actuel des boutons => ReadSWx est défini par un #define 
+	
+	
+	
+	//lecture de l'état actuel des boutons => ReadSWx est défini par un #define
 	StateSW1 = ReadSW1; //StateSW1 = digitalRead(4);
 	StateSW2 = ReadSW2; //StateSW2 = digitalRead(5);
 	StateSW3 = ReadSW3; //StateSW3 = digitalRead(6);
 	StateSW4 = ReadSW4; //...
-	StateSW5 = ReadSW5; 
-	StateSW6 = ReadSW6; 
+	StateSW5 = ReadSW5;
+	StateSW6 = ReadSW6;
 
 	
 	if (StateSW1 != LastStateSW1)
@@ -575,7 +584,7 @@ void loop()
 
 	//LastStateSW4 Peut etre utilisé pour une interruption sur PIND3
 	//Si l'état du bouton SW4 à changé et que SW1 n'est pas pressé
-	if (StateSW4 != LastStateSW4 && !LastStateSW1) 
+	if (StateSW4 != LastStateSW4 && !LastStateSW1)
 	{
 		LastStateSW4 = StateSW4;
 		if (LastStateSW4)//quand le bouton est préssé
@@ -596,7 +605,7 @@ void loop()
 		}
 	}
 	//Si l'état du bouton SW4 à changé et que SW1 est pressé
-	if (StateSW4 != LastStateSW4 && LastStateSW1) 
+	if (StateSW4 != LastStateSW4 && LastStateSW1)
 	{
 		LastStateSW4 = StateSW4;
 		if (LastStateSW4)//quand le bouton est préssé
@@ -696,11 +705,11 @@ void affiche_temps(int colonne, int ligne)
 }
 
 
-**********************************************************
+/**********************************************************
 **														**
 **  INTERRUPT FONCTION ON PIND3 => arduino pin 3 (int1)	**
 **														**
-**********************************************************
+**********************************************************/
 
 void stop()
 {
