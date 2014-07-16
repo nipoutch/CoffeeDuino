@@ -393,25 +393,33 @@ void loop()
 			detachInterrupt(1);
 			lcd.clear();
 			start = false;
+			PreviousStart = true;
 			PORTB &= ~(1 << PIN0);
 			lcd.setCursor(0,0);
 			lcd.print("Manuel");
 			FirstLoop = false;
 		}
 		
-		lcd.setCursor(0,1);
+		
 		
 		if(start == true)
 		{
+			if(PreviousStart != start)
+			{
+			lcd.setCursor(0,1);
 			lcd.print("ON ");
 			PORTB |= (1 << PIN0);//digitalWrite(commande_relais, HIGH);
+			PreviousStart = start;
+			}
 			if(millis() - PressLT > TimeLock){lcd.setCursor(3,1); lcd.print("Lock");}
 		}
 		
-		else if(start == false)
+		else if(start == false && PreviousStart != start)
 		{
+			lcd.setCursor(0,1);
 			lcd.print("OFF    ");
 			PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
+			PreviousStart = start;
 		}
 		
 		break;
@@ -422,6 +430,7 @@ void loop()
 		{
 			lcd.clear();
 			start = false;
+			PreviousStart = true;
 			PORTB &= ~(1 << PIN0);
 			lcd.setCursor(0,0);
 			lcd.print("Maint");
@@ -571,10 +580,7 @@ void loop()
 		LastStateSW4 = StateSW4;
 		if (LastStateSW4)//quand le bouton est préssé
 		{
-			if(menu == 2)
-			{
-				start = true;
-			}
+			if(menu == 2){start = true;}
 			PressLT = millis();//on initialise le compteur "bouton pressé depuis"
 		}
 		if (!LastStateSW4)//quand le bouton est relaché
