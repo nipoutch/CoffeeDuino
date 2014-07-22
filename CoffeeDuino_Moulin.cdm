@@ -21,12 +21,13 @@ LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 Adafruit_ADS1115 ads;
 
 long time = 0; // interval de lecture du capteur
-uint16_t timeBetweenReadings = 1000; //temps entre 2 pesées
+long time2 = 0;
+uint16_t timeBetweenReadings = 500; //temps entre 2 pesées
 
 
 float Uav ;
 uint16_t CAN ;
-uint8_t Boucle_Lecture_Analog = 25; // nombre de lecture de l'entrée analogique
+uint8_t Boucle_Lecture_Analog = 15; // nombre de lecture de l'entrée analogique
 float load = 0;;
 
 
@@ -99,17 +100,35 @@ float PreviousTimer = time;
 boolean PreviousStart = false;
 boolean ExecuteOnce = false;
 
+
+
+/**************************************************************************
+Modif pour optimisation du poids  => Déclaration
+**************************************************************************/
+// Values for the analog sample buffer for running average to smooth analogue reads
+static uint16_t samplesBuffer = 256; // Should be the same as the number of samples
+uint16_t analogSamples[256] = {0}; // Number of analog samples to average and set to 0
+uint16_t lastSampleIndex = 0; // Last analog sample
+long sampleBufferTotal = 0; // The sum of all the samples held in the buffer
+long analogSamplesAverage = 0; // Running average of the sum of the buffer
+
+uint16_t analogValue;
+uint16_t oldSample;
+
+/**************************************************************************
+Modif pour optimisation du poids  => Fin de déclaration
+**************************************************************************/
+
+
 void setup()
 {
 	
 	//EEPROM.writeFloat(addr_timer, 2.0);
 	//EEPROM.writeFloat(addr_poids, 10.0);
-	
 	timer = EEPROM.readFloat(addr_timer);
 	poids = EEPROM.readFloat(addr_poids);
 
-	
-	Serial.begin(9600);
+	Serial.begin(115200);
 	
 	DDRC &= ~(1 << DDC4); // pinMode(A0, INPUT);
 	LastStateSW1 = PINC & (1 << PINC0); //LastStateSW1 = digitalRead(A0);
@@ -140,6 +159,8 @@ void setup()
 	lcd.setBacklight(WHITE);
 	lcd.backlight();
 	init_tare = tare();
+	Serial.print("init_tare");
+	Serial.println(init_tare);
 	
 }
 
@@ -148,8 +169,15 @@ void setup()
 void loop()
 {
 	long debut = millis();
-
 	char char_temp[8]; // tableau de caractère utilisé pour le formatage des Float avec dtostrf
+
+/**************************************************************************
+Modif pour optimisation du poids  => A faire à chaque boucle
+**************************************************************************/
+analogSamplesAverage = MovingAverage(AnalogReadAverage());
+/**************************************************************************
+Modif pour optimisation du poids  => FIN A faire à chaque boucle
+**************************************************************************/
 
 	switch (menu)
 	{
@@ -169,24 +197,28 @@ void loop()
 			lcd.setCursor(5, 0);
 			dtostrf(poids, 4, 1, char_temp);
 			lcd.print(char_temp);
-			lcd.setCursor(10, 0);
-			dtostrf(load, 6, 2, char_temp);
+			lcd.setCursor(11, 0);
+			dtostrf(load, 5, 1, char_temp);
 			lcd.print(char_temp);
 			PreviousPoids = poids;
 			PreviousLoad = load;
+			//time = millis();
+		}	
+		
+		if((millis() > time + timeBetweenReadings) && !SW2andSW3)
+		{
+			Serial.print("moyenne	");Serial.println(analogSamplesAverage);
+			Serial.print("tare		");Serial.println(init_tare);
+			load = analogToLoad(analogSamplesAverage) - analogToLoad(init_tare);
+			load = Roundn(load,1);
+			//Serial.print("arondi");Serial.println(Roundn(load,1));
+			//load = analogToLoad(analogSamplesAverage - init_tare);
+			time = millis();
 		}
 		
 		if(start == false && PreviousStart != start) {lcd.setCursor(0,1);lcd.print("OFF");PreviousStart = start;}
 		if(poids != PreviousPoids){lcd.setCursor(5, 0); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp); PreviousPoids = poids;Serial.println(poids);}
-		if(load != PreviousLoad){lcd.setCursor(10, 0); dtostrf(load, 6, 2, char_temp);lcd.print(char_temp); PreviousLoad = load;}
-		
-		
-		if((millis() > time + timeBetweenReadings) && !SW2andSW3)
-		{
-			capteur_poids = moyenne_valeur_analog();
-			load = analogToLoad(capteur_poids) - analogToLoad(init_tare);
-			time = millis();
-		}
+		if(load != PreviousLoad){lcd.setCursor(11, 0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp); PreviousLoad = load;}
 		
 		if(start == true)
 		{
@@ -252,10 +284,10 @@ void loop()
 			{
 				lcd.setCursor(4,1);
 				lcd.print("Mesure poids");
-				delay(2000);
+				//delay(2000);
+				capteur_poids = LoadCellReadAverage();
 				lcd.setCursor(4,1);
 				lcd.print("             ");
-				capteur_poids = moyenne_valeur_analog();
 				load = analogToLoad(capteur_poids) - analogToLoad(init_tare);
 				ratio = load / (poids * temps_ratio); //calcul du ratio poids gramme par seconde
 				lcd.setCursor(11, 0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp);
@@ -279,10 +311,12 @@ void loop()
 			
 			if (cnt_boucle > 1)
 			{
-				lcd.setCursor(6,1);
-				lcd.print("WAIT");
-				delay(1500);
-				capteur_poids = moyenne_valeur_analog();
+				lcd.setCursor(4,1);
+				lcd.print("Mesure poids");
+				//delay(2000);
+				capteur_poids = LoadCellReadAverage();
+				lcd.setCursor(4,1);
+				lcd.print("             ");
 				load = analogToLoad(capteur_poids) - analogToLoad(init_tare);
 				lcd.setCursor(11, 0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp);
 				
@@ -436,24 +470,33 @@ void loop()
 			PreviousStart = true;
 			PORTB &= ~(1 << PIN0);
 			lcd.setCursor(0,0);
-			lcd.print("Maint");
+			lcd.print("M  |");
+			lcd.setCursor(1,1);
+			lcd.print("  |");
 			FirstLoop = false;
 		}
 		if(millis() > time + timeBetweenReadings)
 		{
 			//clearFonction(menu);
-			CAN = moyenne_valeur_analog();
-			Uav = CAN * 0.000125;
-			lcd.setCursor(0,1);
-			//lcd.print("        ");
-			lcd.print(Uav);
-			lcd.setCursor(10,1);
-			//lcd.print("          ");
-			lcd.print(CAN);
-			Serial.println(CAN);
+			lcd.setCursor(4,0);
+			lcd.print(AnalogReadAverage());
+			if(AnalogReadAverage() < 10000){lcd.setCursor(8,0);lcd.print(" ");}
+			lcd.setCursor(4,1);
+			lcd.print(analogSamplesAverage);
+			if(analogSamplesAverage < 10000){lcd.setCursor(8,1);lcd.print(" ");}
 			time = millis();
 		}
+		/*
+		if(millis() > time2 + 200)
+		{
+			lcd.setCursor(0,1);
+			lcd.print(millis()-debut);
+			time2 = millis();
+		}
+		*/
 		
+		//Serial.println(millis()-debut);
+
 		break;
 		
 		//default:
@@ -464,7 +507,7 @@ void loop()
 	
 	
 	
-	Serial.println(millis()-debut);
+	//Serial.println(millis()-debut);
 	
 	
 	
@@ -638,62 +681,55 @@ void loop()
 
 float analogToLoad(float analogval)
 {
-
-	float loadA = 00.00; // grammes
-	int analogvalA = 3350; // analog reading taken with load A on the load cell
-	float loadB = 400.00; // grammes
-	int analogvalB = 20000; // analog reading taken with load B on the load cell
-
-	float load = (analogval - analogvalA) * (loadB - loadA) / (analogvalB - analogvalA) + loadA;
-	return load;
-}
-
-
-
-
-
-uint16_t moyenne_valeur_analog()
-{
-	uint16_t val = LoadCellRead;
-	for(int i=0; i < Boucle_Lecture_Analog; i++)
-	{
-		val = (val + LoadCellRead)/2;
-	}
-	return val;
+	float load_temp;
+	float loadA = 00.0; // grammes
+	int analogvalA = 3930; // analog reading taken with load A on the load cell
+	float loadB = 300.0; // grammes
+	int analogvalB = 25907; // analog reading taken with load B on the load cell
+	load_temp = (analogval - analogvalA) * (loadB - loadA) / (analogvalB - analogvalA) + loadA;
+	return load_temp;
 }
 
 
 int16_t tare()
 {
-	uint8_t itab_tare = 25;
-	uint16_t delay_total = 3000;
-	uint16_t delay_wait = 2000;
-	uint8_t delay_boucle = (delay_total - delay_wait)/itab_tare;
-	uint16_t tare;
-	uint16_t tare_moyenne = LoadCellRead;
-	uint16_t init_tare;
-	
+	uint16_t delay_wait = 1000;
+	long Tare_Moyenne = 0;
 	lcd.clear();
 	lcd.setCursor(3,0);
 	lcd.print("RockyMatic");
 	lcd.setCursor(1,1);
 	lcd.print("Tare en cours");
 	delay(delay_wait);
-	
-	
-	for(int cnt=0; cnt < itab_tare; cnt++)
+
+	for(int cnt=0; cnt < samplesBuffer; cnt++)
 	{
-		tare = LoadCellRead;
-		tare_moyenne = (tare + tare_moyenne)/2;
-		delay(delay_boucle);
+		analogSamplesAverage = MovingAverage(AnalogReadAverage());
 	}
 	
 	lcd.clear();
 	FirstLoop = true;
-	return tare_moyenne;
+	return analogSamplesAverage;
 }
 
+int16_t LoadCellReadAverage()
+{
+	for(int cnt=0; cnt < samplesBuffer; cnt++)
+	{
+		MovingAverage(AnalogReadAverage());
+	}
+	return analogSamplesAverage;
+}
 
+uint16_t AnalogReadAverage()
+{
+	long AnalogReadAverage = 0;
+	for(uint8_t i=0; i<4; i++)
+	{
+		AnalogReadAverage += LoadCellRead;
+	}
+return AnalogReadAverage >> 2;
+}
 
 void affiche_temps(int colonne, int ligne)
 {
@@ -703,6 +739,69 @@ void affiche_temps(int colonne, int ligne)
 	lcd.print(tmp);
 	if(secondes_remain < 100){lcd.setCursor(colonne + 4,ligne);lcd.print(" ");}
 }
+
+/**************************************************************************
+Modif pour optimisation du poids  => déclaratino de fonction
+**************************************************************************/
+uint16_t MovingAverage(int16_t newSample)
+{
+	if(lastSampleIndex != samplesBuffer-1)
+	{
+		lastSampleIndex ++;  // Move to next index
+		oldSample = analogSamples[lastSampleIndex];  // Get old analog sample
+		analogSamples[lastSampleIndex] = newSample;  // Add new analog sample
+	}	
+	if(lastSampleIndex == samplesBuffer - 1 )
+	{
+		oldSample = analogSamples[0];  // Get old analog sample from start of buffer
+		analogSamples[0] = newSample;  // Add new analog sample to start of buffer
+		lastSampleIndex = 0;  // Record sample index currently working on
+	}
+	sampleBufferTotal += newSample;  // Add new analog sample
+	sampleBufferTotal -= oldSample;  // Subtract oldest analog sample
+	return sampleBufferTotal >> 8;  // Return average analog sample reading
+}
+/**************************************************************************
+Modif pour optimisation du poids  => FIN déclaratino de fonction
+**************************************************************************/
+
+
+/**************************************************************************
+Modif pour optimisation du poids  => Around 
+**************************************************************************/
+
+double GetDecExp(int nDec)
+{	
+	double dRet;
+	double ad[6]={1.,10.,100.,1000.,10000.,100000.};
+ 
+	if(nDec>=0 && nDec<=5) return(ad[nDec]);
+	dRet=ad[5];			
+	for(int i=1;i<nDec-4;i++) dRet*=10.;
+	return floor(dRet);
+}
+ 
+double Roundn(double dValue,int nDecimales)
+{
+	if (nDecimales<0 || dValue==0.) return(dValue);
+ 
+	double dSeuil =(dValue<0.?-.5:.5);
+ 
+	double dExp=GetDecExp(nDecimales);
+ 
+ 	double dCalc = (((dValue*dExp)+dSeuil));
+ 
+	if(dValue<0.)
+		return(ceil(dCalc)/dExp);
+	else		
+		return(floor(dCalc)/dExp);
+}
+/**************************************************************************
+Modif pour optimisation du poids  => FIN Around
+**************************************************************************/
+
+
+
 
 
 /**********************************************************
