@@ -174,7 +174,9 @@ void loop()
 /**************************************************************************
 Modif pour optimisation du poids  => A faire à chaque boucle
 **************************************************************************/
+
 analogSamplesAverage = MovingAverage(AnalogReadAverage());
+
 /**************************************************************************
 Modif pour optimisation du poids  => FIN A faire à chaque boucle
 **************************************************************************/
@@ -202,7 +204,6 @@ Modif pour optimisation du poids  => FIN A faire à chaque boucle
 			lcd.print(char_temp);
 			PreviousPoids = poids;
 			PreviousLoad = load;
-			//time = millis();
 		}	
 		
 		if((millis() > time + timeBetweenReadings) && !SW2andSW3)
@@ -211,8 +212,6 @@ Modif pour optimisation du poids  => FIN A faire à chaque boucle
 			Serial.print("tare		");Serial.println(init_tare);
 			load = analogToLoad(analogSamplesAverage) - analogToLoad(init_tare);
 			load = Roundn(load,1);
-			//Serial.print("arondi");Serial.println(Roundn(load,1));
-			//load = analogToLoad(analogSamplesAverage - init_tare);
 			time = millis();
 		}
 		
@@ -728,7 +727,7 @@ uint16_t AnalogReadAverage()
 	{
 		AnalogReadAverage += LoadCellRead;
 	}
-return AnalogReadAverage >> 2;
+	return AnalogReadAverage >> 2;
 }
 
 void affiche_temps(int colonne, int ligne)
