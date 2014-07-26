@@ -119,7 +119,7 @@
 
 	void setup()
 	{
-		
+
 		//EEPROM.writeFloat(addr_timer, 2.0);
 		//EEPROM.writeFloat(addr_poids, 10.0);
 		timer = EEPROM.readFloat(addr_timer);
@@ -173,13 +173,13 @@
 	**************************************************************************/
 
 	analogSamplesAverage = MovingAverage(AnalogReadAverage(nSample));
-	//Serial.println(analogSamplesAverage);
+
 	if((millis() > time + timeBetweenReadings) && !SW2andSW3)
-				{
-					load = Roundn(analogToLoad(analogSamplesAverage),1) - Roundn(analogToLoad(init_tare),1);
-					//load = Roundn(load,1);
-					time = millis();
-				}
+	{
+		load = Roundn(analogToLoad(analogSamplesAverage),1) - Roundn(analogToLoad(init_tare),1);
+		//load = Roundn(load,1);
+		time = millis();
+	}
 			
 	if(load != PreviousLoad){lcd.setCursor(11,0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp); PreviousLoad = load;}
 	/**************************************************************************
