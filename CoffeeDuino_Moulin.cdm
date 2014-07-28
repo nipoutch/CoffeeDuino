@@ -42,7 +42,8 @@ uint16_t capteur_poids = 0;
 
 volatile boolean start = false;
 volatile boolean Count = false;
-volatile uint8_t StopByInterrupt = false ;
+volatile boolean StopByInterrupt = false;
+volatile boolean error = false;
 
 unsigned long last_time = 0;
 unsigned long time_now = 0;
@@ -96,7 +97,8 @@ float PreviousTimer = time;
 
 boolean PreviousStart = false;
 boolean ExecuteOnce = false;
-volatile boolean error = false;
+
+char char_temp[8]; // tableau de caractère utilisé pour le formatage des Float avec dtostrf
 
 
 
@@ -107,7 +109,7 @@ Modif pour optimisation du poids => Déclaration
 static uint16_t samplesBuffer = 256; // Should be the same as the number of samples
 uint16_t analogSamples[256] = {0}; // Number of analog samples to average and set to 0
 uint16_t lastSampleIndex = 0; // Last analog sample
-uint8_t nSample = 4;
+uint8_t nSample = 4;//moyenne de 4 samples pour une valeur dans analogSamples[x]
 uint8_t nSample_Tare = 4;
 long sampleBufferTotal = 0; // The sum of all the samples held in the buffer
 long analogSamplesAverage = 0; // Running average of the sum of the buffer
@@ -166,7 +168,6 @@ void setup()
 void loop()
 {
 	long debut = millis();
-	char char_temp[8]; // tableau de caractère utilisé pour le formatage des Float avec dtostrf
 
 	/**************************************************************************
 	Modif pour optimisation du poids => A faire à chaque boucle
@@ -455,7 +456,7 @@ void loop()
 			lcd.setCursor(0,0);
 			lcd.print("RockyMatic ");
 			lcd.setCursor(0,1);
-			lcd.print("Manuel ");
+			lcd.print("Manuel       ");
 			lcd.setCursor(11, 0);
 			dtostrf(load, 5, 1, char_temp);
 			lcd.print(char_temp);
@@ -482,8 +483,8 @@ void loop()
 		}
 		else if(start == false && PreviousStart != start)
 		{
-			lcd.setCursor(8,1);
-			lcd.print(" OFF");
+			lcd.setCursor(7,1);
+			lcd.print("      OFF");
 			PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
 			PreviousStart = start;
 			ExecuteOnce = true;
@@ -548,8 +549,8 @@ void loop()
 	}
 
 
-
-	//Serial.println(millis()-debut);
+	Serial.print("temps1 : ");
+	Serial.println(millis()-debut);
 
 
 
@@ -717,7 +718,9 @@ void loop()
 		{
 		}
 	}
-	//Serial.println(millis()-debut);
+	Serial.print("temps2 : ");
+	Serial.println(millis()-debut);
+	
 }
 
 float analogToLoad(float analogval)
