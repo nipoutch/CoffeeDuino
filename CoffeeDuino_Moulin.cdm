@@ -153,13 +153,12 @@ void setup()
 	// interruption permettant de sortir de la boucle de décompte de temps
 	attachInterrupt(1, stop, FALLING );
 	ads.setGain(GAIN_ONE); // 1x gain +/- 4.096V 1 bit = 0.125mV
+	ads.setSPS(SPS_860);
 	ads.begin(); // initialisation du ADC
 	lcd.begin(16, 2);
 	lcd.setBacklight(WHITE);
 	lcd.backlight();
 	init_tare = tare();
-	//Serial.print("init_tare");
-	//Serial.println(init_tare);
 
 }
 
@@ -174,7 +173,7 @@ void loop()
 	**************************************************************************/
 
 	analogSamplesAverage = MovingAverage(AnalogReadAverage(nSample));
-	//Serial.println(analogSamplesAverage);
+	Serial.println(analogSamplesAverage);
 	if((millis() > time + timeBetweenReadings) && !SW2andSW3)
 	{
 		load = Roundn(analogToLoad(analogSamplesAverage),1) - Roundn(analogToLoad(init_tare),1);
@@ -199,7 +198,6 @@ void loop()
 			start = false;
 			PreviousStart = true;
 			FirstLoop = false;
-			//lcd.clear();
 			lcd.setCursor(0,0);
 			lcd.print("RockyMatic ");
 			lcd.setCursor(0,1);
@@ -277,27 +275,24 @@ void loop()
 			if (cnt_boucle == 1 && start)
 			{
 				lcd.setCursor(5,1);
-				lcd.print(" Mesure ");
+				lcd.print("   Mesure  ");
 				delay(1000);
 				capteur_poids = LoadCellReadAverage(2);
-				Serial.println(capteur_poids);
 				lcd.setCursor(5,1);
 				lcd.print(" ");
 				load = analogToLoad(capteur_poids) - analogToLoad(init_tare);
 				load = Roundn(load,1);
 				ratio = load / (poids * temps_ratio); //calcul du ratio poids gramme par seconde
-				Serial.print("ratio : ");
-				Serial.println(ratio);
 				lcd.setCursor(11, 0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp);
 
 				if (load > poids | ratio < 0.4)
 				{
 					start = false;
 					cnt_boucle = 0;
-					lcd.setCursor(7, 1); lcd.print("ERREUR #");
+					lcd.setCursor(6, 1); lcd.print(" ERREUR # ");
 					error = true;
 					while(error){}
-					lcd.setCursor(5,1); lcd.print(" ");
+					lcd.setCursor(5,1); lcd.print("           ");
 					lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp);
 				}
 
@@ -306,6 +301,7 @@ void loop()
 					lcd.setCursor(6,1); lcd.print("RATIO :");
 					lcd.setCursor(11, 1); dtostrf(ratio, 5, 1, char_temp);lcd.print(char_temp);
 					delay(1000);
+					lcd.setCursor(5,1); lcd.print("           ");
 					reste = ((poids - load) / ratio);// calcul du temps d'exution de la seconde boucle while
 				}
 			}
@@ -313,7 +309,7 @@ void loop()
 			if (cnt_boucle > 1 && start)
 			{
 				lcd.setCursor(5,1);
-				lcd.print(" Mesure ");
+				lcd.print("   Mesure  ");
 				delay(1000);
 				capteur_poids = LoadCellReadAverage(2);
 				Serial.println(capteur_poids);
@@ -342,11 +338,11 @@ void loop()
 					start = false;
 					cnt_boucle = 0;
 					nb_pulse = 0;
-					lcd.setCursor(5,1); lcd.print(" ");
-					lcd.setCursor(7, 1); lcd.print("ERREUR #");
+					lcd.setCursor(5,1); lcd.print("           ");
+					lcd.setCursor(6, 1); lcd.print(" ERREUR # ");
 					error = true;
 					while(error){};
-					lcd.setCursor(5,1); lcd.print(" ");
+					lcd.setCursor(5,1); lcd.print("           ");
 					lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp);
 				}
 
@@ -357,8 +353,6 @@ void loop()
 				nb_pulse = 0;
 			}
 
-
-			//lcd.setCursor(3, 1); lcd.print(" ");
 		}
 		break;
 		// fonction timer
@@ -449,7 +443,6 @@ void loop()
 		if(FirstLoop == true )
 		{
 			detachInterrupt(1);
-			//lcd.clear();
 			start = false;
 			PreviousStart = true;
 			PORTB &= ~(1 << PIN0);
@@ -766,9 +759,10 @@ void affiche_temps(int colonne, int ligne)
 {
 	char tmp[6];
 	sprintf(tmp, "%2d.%d", secondes_remain, dixieme_remain);
+	if(secondes_remain < 100){lcd.setCursor(colonne + 4,ligne);lcd.print(" ");}
 	lcd.setCursor(colonne,ligne);
 	lcd.print(tmp);
-	if(secondes_remain < 100){lcd.setCursor(colonne + 4,ligne);lcd.print(" ");}
+	
 }
 
 /**************************************************************************
