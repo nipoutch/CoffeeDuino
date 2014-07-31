@@ -1,880 +1,884 @@
-#include <avr/io.h> // .h contenant les registres SFR
-#include <util/delay.h> // .h contenant les fonctions de délai
-#include <Wire.h>
-#include <Adafruit_ADS1115.h>
-#include <LiquidCrystal_I2C.h>
-#include <EEPROMex.h>
+	 #include <avr/io.h> // .h contenant les registres SFR
+	#include <util/delay.h> // .h contenant les fonctions de délai
+	#include <Wire.h>
+	#include <Adafruit_ADS1115.h>
+	#include <LiquidCrystal_I2C.h>
+	#include <EEPROMex.h>
 
-#define WHITE 0x7
+	#define WHITE 0x7
 
-#define LoadCellRead ads.readADC_SingleEnded(1)
+	#define LoadCellRead ads.readADC_SingleEnded(1)
 
-#define ReadSW1 PINC & (1 << DDC0) //digitalRead(A0);
-#define ReadSW2 PIND & (1 << DDD5) //digitalRead(5);
-#define ReadSW3 PIND & (1 << DDD6) //digitalRead(6);
-#define ReadSW4 PIND & (1 << DDD3) //digitalRead(6); => int1 arduino
-#define ReadSW5 PIND & (1 << DDD4) //digitalRead(4);
-#define ReadSW6 PIND & (1 << DDD7) //digitalRead(7);
+	#define ReadSW1 PINC & (1 << DDC0) //digitalRead(A0);
+	#define ReadSW2 PIND & (1 << DDD5) //digitalRead(5);
+	#define ReadSW3 PIND & (1 << DDD6) //digitalRead(6);
+	#define ReadSW4 PIND & (1 << DDD3) //digitalRead(6); => int1 arduino
+	#define ReadSW5 PIND & (1 << DDD4) //digitalRead(4);
+	#define ReadSW6 PIND & (1 << DDD7) //digitalRead(7);
 
-LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+	LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
-Adafruit_ADS1115 ads;
+	Adafruit_ADS1115 ads;
 
-long time = 0; // interval de lecture du capteur
-uint16_t timeBetweenReadings = 500; //temps entre 2 pesées
+	long time = 0; // interval de lecture du capteur
+	uint16_t timeBetweenReadings = 500; //temps entre 2 pesées
 
-float load = 0;
-float PreviousLoadCompare = 0;
-
-
-volatile uint8_t menu = 0; //valeur du menu à afficher
-volatile uint8_t oldmenu = 0; //valeur du menu à afficher
-
-float timer; // valeur du timer
-float timer_purge = 3.0; // valeur du timer
-char dixieme_remain;
-char secondes_remain;
-
-float poids; // valeur du poids
-
-uint16_t init_tare;
-uint16_t capteur_poids = 0;
-
-volatile boolean start = false;
-volatile boolean Count = false;
-volatile boolean StopByInterrupt = false;
-volatile boolean error = false;
-
-unsigned long last_time = 0;
-unsigned long time_now = 0;
-
-float temps_ratio = 0.75;
-float ratio;
-float reste;
-int cnt_boucle = 0;
-int nb_pulse = 0;
-
-uint8_t addr_init = 0;
-uint8_t addr_timer = addr_init;
-uint8_t addr_poids = addr_init + 4;
-
-bool LastStateSW1; // the current reading from the input pin
-bool LastStateSW2;
-bool LastStateSW3;
-bool LastStateSW4;
-bool LastStateSW5;
-bool LastStateSW6;
-
-bool StateSW1;
-bool StateSW2;
-bool StateSW3;
-bool StateSW4;
-bool StateSW5;
-bool StateSW6;
-
-bool FirstLoop = true;
-bool DoNotChangeMenu = false;
-
-unsigned long InterAccelTime_init = 0;
-unsigned long InterAccelTime_diff = 0;
-unsigned long PressLT = 0;
-unsigned long PressTD = 0;
-
-uint16_t Inter_init = 400;
-uint16_t Inter = Inter_init;
-uint8_t InterAccelValue_1 = Inter_init/4;
-uint8_t InterAccelValue_2 = Inter_init/8;
-uint8_t InterAccelValue_3 = Inter_init/16;
-uint8_t InterAccelValue_4 = Inter_init/64;
-
-boolean SW2andSW3 = false;
-
-static uint16_t TimeLock = 1500;
-
-float PreviousPoids = poids;
-float PreviousLoad = load;
-float PreviousTimer = time;
-
-boolean PreviousStart = false;
-boolean ExecuteOnce = false;
-
-char char_temp[8]; // tableau de caractère utilisé pour le formatage des Float avec dtostrf
+	float load = 0;
+	float PreviousLoadCompare = 0;
 
 
+	volatile uint8_t menu = 0; //valeur du menu à afficher
+	volatile uint8_t oldmenu = 0; //valeur du menu à afficher
 
-/**************************************************************************
-Modif pour optimisation du poids => Déclaration
-**************************************************************************/
-// Values for the analog sample buffer for running average to smooth analogue reads
-static uint16_t samplesBuffer = 256; // Should be the same as the number of samples
-uint16_t analogSamples[256] = {0}; // Number of analog samples to average and set to 0
-uint16_t lastSampleIndex = 0; // Last analog sample
-uint8_t nSample = 4;//moyenne de 4 samples pour une valeur dans analogSamples[x]
-uint8_t nSample_Tare = 4;
-long sampleBufferTotal = 0; // The sum of all the samples held in the buffer
-long analogSamplesAverage = 0; // Running average of the sum of the buffer
-uint16_t oldSample;
-/**************************************************************************
-Modif pour optimisation du poids => Fin de déclaration
-**************************************************************************/
+	float timer; // valeur du timer
+	float timer_purge = 3.0; // valeur du timer
+	char dixieme_remain;
+	char secondes_remain;
+
+	float poids; // valeur du poids
+
+	uint16_t init_tare;
+	uint16_t capteur_poids = 0;
+
+	volatile boolean start = false;
+	volatile boolean Count = false;
+	volatile boolean StopByInterrupt = false;
+	volatile boolean error = false;
+
+	unsigned long last_time = 0;
+	unsigned long time_now = 0;
+
+	float temps_ratio = 0.75;
+	float ratio;
+	float reste;
+	int cnt_boucle = 0;
+	int nb_pulse = 0;
+
+	uint8_t addr_init = 0;
+	uint8_t addr_timer = addr_init;
+	uint8_t addr_poids = addr_init + 4;
+
+	bool LastStateSW1; // the current reading from the input pin
+	bool LastStateSW2;
+	bool LastStateSW3;
+	bool LastStateSW4;
+	bool LastStateSW5;
+	bool LastStateSW6;
+
+	bool StateSW1;
+	bool StateSW2;
+	bool StateSW3;
+	bool StateSW4;
+	bool StateSW5;
+	bool StateSW6;
+
+	bool FirstLoop = true;
+	bool DoNotChangeMenu = false;
+
+	unsigned long InterAccelTime_init = 0;
+	unsigned long InterAccelTime_diff = 0;
+	unsigned long PressLT = 0;
+	unsigned long PressTD = 0;
+
+	uint16_t Inter_init = 400;
+	uint16_t Inter = Inter_init;
+	uint8_t InterAccelValue_1 = Inter_init/4;
+	uint8_t InterAccelValue_2 = Inter_init/8;
+	uint8_t InterAccelValue_3 = Inter_init/16;
+	uint8_t InterAccelValue_4 = Inter_init/64;
+
+	boolean SW2andSW3 = false;
+
+	static uint16_t TimeLock = 1500;
+
+	float PreviousPoids = poids;
+	float PreviousLoad = load;
+	float PreviousTimer = time;
+
+	boolean PreviousStart = false;
+	boolean ExecuteOnce = false;
+
+	char char_temp[8]; // tableau de caractère utilisé pour le formatage des Float avec dtostrf
 
 
-void setup()
-{
-
-	//EEPROM.writeFloat(addr_timer, 2.0);
-	//EEPROM.writeFloat(addr_poids, 10.0);
-	timer = EEPROM.readFloat(addr_timer);
-	poids = EEPROM.readFloat(addr_poids);
-
-	Serial.begin(115200);
-
-	DDRC &= ~(1 << DDC4); // pinMode(A0, INPUT);
-	LastStateSW1 = PINC & (1 << PINC0); //LastStateSW1 = digitalRead(A0);
-
-	DDRD &= ~(1 << DDD5); // pinMode(5, INPUT);
-	LastStateSW2 = PIND & (1 << PIND5); //LastStateSW2 = digitalRead(5);
-
-	DDRD &= ~(1 << DDD6); // pinMode(6, INPUT);
-	LastStateSW3 = PIND & (1 << PIND6); //LastStateSW3 = digitalRead(6);
-
-	DDRD &= ~(1 << DDD3); // pinMode(3, INPUT);
-	LastStateSW4 = PIND & (1 << PIND3); //LastStateSW4 = digitalRead(3);
-
-	DDRD &= ~(1 << DDD4); // pinMode(4, INPUT);
-	LastStateSW5 = PIND & (1 << PIND4); //LastStateSW5 = digitalRead(4);
-
-	DDRD &= ~(1 << DDD7); // pinMode(7, INPUT);
-	LastStateSW6 = PIND & (1 << PIND7); //LastStateSW6 = digitalRead(7);
-
-
-	//PORTB bit0 => pinMode(8, OUTPUT) => 3WAY ____ PORTB bit1 => pinMode(9, OUTPUT) => PUMP ____ PORTB bit2 => pinMode(10, OUTPUT)
-	DDRB |= (1 << DDB0) | (1 << DDB1) | (1 << DDB2);
-	// interruption permettant de sortir de la boucle de décompte de temps
-	attachInterrupt(1, stop, FALLING );
-	ads.setGain(GAIN_ONE); // 1x gain +/- 4.096V 1 bit = 0.125mV
-	ads.setSPS(SPS_860);
-	ads.begin(); // initialisation du ADC
-	lcd.begin(16, 2);
-	lcd.setBacklight(WHITE);
-	lcd.backlight();
-	init_tare = tare();
-
-}
-
-
-
-void loop()
-{
-	long debut = millis();
 
 	/**************************************************************************
-	Modif pour optimisation du poids => A faire à chaque boucle
+	Modif pour optimisation du poids => Déclaration
+	**************************************************************************/
+	// Values for the analog sample buffer for running average to smooth analogue reads
+	static uint16_t samplesBuffer = 256; // Should be the same as the number of samples
+	uint16_t analogSamples[256] = {0}; // Number of analog samples to average and set to 0
+	uint16_t lastSampleIndex = 0; // Last analog sample
+	uint8_t nSample = 4;//moyenne de 4 samples pour une valeur dans analogSamples[x]
+	uint8_t nSample_Tare = 4;
+	long sampleBufferTotal = 0; // The sum of all the samples held in the buffer
+	long analogSamplesAverage = 0; // Running average of the sum of the buffer
+	uint16_t oldSample;
+	/**************************************************************************
+	Modif pour optimisation du poids => Fin de déclaration
 	**************************************************************************/
 
-	analogSamplesAverage = MovingAverage(AnalogReadAverage(nSample));
-	Serial.println(analogSamplesAverage);
-	if((millis() > time + timeBetweenReadings) && !SW2andSW3)
+
+	void setup()
 	{
-		load = Roundn(analogToLoad(analogSamplesAverage),1) - Roundn(analogToLoad(init_tare),1);
-		//load = Roundn(load,1);
-		time = millis();
+
+		//EEPROM.writeFloat(addr_timer, 2.0);
+		//EEPROM.writeFloat(addr_poids, 10.0);
+		timer = EEPROM.readFloat(addr_timer);
+		poids = EEPROM.readFloat(addr_poids);
+		DDRC &= ~(1 << DDC4); // pinMode(A0, INPUT);
+		LastStateSW1 = PINC & (1 << PINC0); //LastStateSW1 = digitalRead(A0);
+
+		DDRD &= ~(1 << DDD5); // pinMode(5, INPUT);
+		LastStateSW2 = PIND & (1 << PIND5); //LastStateSW2 = digitalRead(5);
+
+		DDRD &= ~(1 << DDD6); // pinMode(6, INPUT);
+		LastStateSW3 = PIND & (1 << PIND6); //LastStateSW3 = digitalRead(6);
+
+		DDRD &= ~(1 << DDD3); // pinMode(3, INPUT);
+		LastStateSW4 = PIND & (1 << PIND3); //LastStateSW4 = digitalRead(3);
+
+		DDRD &= ~(1 << DDD4); // pinMode(4, INPUT);
+		LastStateSW5 = PIND & (1 << PIND4); //LastStateSW5 = digitalRead(4);
+
+		DDRD &= ~(1 << DDD7); // pinMode(7, INPUT);
+		LastStateSW6 = PIND & (1 << PIND7); //LastStateSW6 = digitalRead(7);
+
+
+		//PORTB bit0 => pinMode(8, OUTPUT) => 3WAY ____ PORTB bit1 => pinMode(9, OUTPUT) => PUMP ____ PORTB bit2 => pinMode(10, OUTPUT)
+		DDRB |= (1 << DDB0) | (1 << DDB1) | (1 << DDB2);
+		// interruption permettant de sortir de la boucle de décompte de temps
+		attachInterrupt(1, stop, FALLING );
+		ads.setGain(GAIN_ONE); // 1x gain +/- 4.096V 1 bit = 0.125mV
+		ads.setSPS(SPS_860);
+		ads.begin(); // initialisation du ADC
+		lcd.begin(16, 2);
+		lcd.setBacklight(WHITE);
+		lcd.backlight();
+		init_tare = tare();
+
 	}
 
-	if(load != PreviousLoad){lcd.setCursor(11,0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp); PreviousLoad = load;}
-	/**************************************************************************
-	Modif pour optimisation du poids => FIN A faire à chaque boucle
-	**************************************************************************/
 
-	switch (menu)
+
+	void loop()
 	{
-		//fonction 1 : asservissement du moulin à une balance
-		case 0:
+		long debut = millis();
 
-		if(FirstLoop == true )
+		/**************************************************************************
+		Modif pour optimisation du poids => A faire à chaque boucle
+		**************************************************************************/
+
+		analogSamplesAverage = MovingAverage(AnalogReadAverage(nSample));
+		if((millis() > time + timeBetweenReadings) && !SW2andSW3)
 		{
-			attachInterrupt(1, stop, FALLING);
-			PORTB &= ~(1 << PIN0);
-			start = false;
-			PreviousStart = true;
-			FirstLoop = false;
-			lcd.setCursor(0,0);
-			lcd.print("RockyMatic ");
-			lcd.setCursor(0,1);
-			lcd.print("Poids ");
-			lcd.setCursor(7,1);
-			dtostrf(poids, 4, 1, char_temp);
-			lcd.print(char_temp);
-			lcd.setCursor(11, 0);
-			dtostrf(load, 5, 1, char_temp);
-			lcd.print(char_temp);
-			PreviousPoids = poids;
-			PreviousLoad = load;
+			load = Roundn(analogToLoad(analogSamplesAverage),1) - Roundn(analogToLoad(init_tare),1);
+			//load = Roundn(load,1);
+			time = millis();
 		}
 
-		if(start == false && PreviousStart != start) {lcd.setCursor(7,1); dtostrf(poids, 4, 1, char_temp);lcd.print(char_temp);lcd.setCursor(13,1);lcd.print("OFF");PreviousStart = start;}
-		if(poids != PreviousPoids){lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp); PreviousPoids = poids;Serial.println(poids);}
+		if(load != PreviousLoad){lcd.setCursor(11,0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp); PreviousLoad = load;}
+		/**************************************************************************
+		Modif pour optimisation du poids => FIN A faire à chaque boucle
+		**************************************************************************/
 
-		if(start == true)
+		switch (menu)
 		{
-			lcd.setCursor(13,1);
-			lcd.print(" ON");
-			PreviousStart = start;
+			//fonction 1 : asservissement du moulin à une balance
+			case 0:
 
-			if (cnt_boucle == 0 && start)
+			if(FirstLoop == true )
 			{
-				secondes_remain = (uint8_t) (poids * temps_ratio) ; //timer en seconde reçoit 2/3 de la valeur du poids voulu en grammes
-				dixieme_remain = (uint8_t) (((poids * temps_ratio) - secondes_remain)*10); //partie decimale 1/10 S
-				Count = true;
+				attachInterrupt(1, stop, FALLING);
+				PORTB &= ~(1 << PIN0);
+				start = false;
+				PreviousStart = true;
+				FirstLoop = false;
+				lcd.setCursor(0,0);
+				lcd.print("RockyMatic ");
+				lcd.setCursor(0,1);
+				lcd.print("Poids ");
+				lcd.setCursor(7,1);
+				dtostrf(poids, 4, 1, char_temp);
+				lcd.print(char_temp);
+				lcd.setCursor(11, 0);
+				dtostrf(load, 5, 1, char_temp);
+				lcd.print(char_temp);
+				PreviousPoids = poids;
+				PreviousLoad = load;
 			}
 
-			if (cnt_boucle == 1 && start)
-			{
-				secondes_remain = (uint8_t) (reste-1) ; //timer en seconde reçoit 2/3 de la valeur du poids voulu en grammes
-				dixieme_remain = (uint8_t) (((reste-1) - secondes_remain)*10); //partie decimale 1/10 S
-				Count = true;
-			}
+			if(start == false && PreviousStart != start) {lcd.setCursor(7,1); dtostrf(poids, 4, 1, char_temp);lcd.print(char_temp);lcd.setCursor(13,1);lcd.print("OFF");PreviousStart = start;}
+			if(poids != PreviousPoids){lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp); PreviousPoids = poids;}
 
-			if (cnt_boucle > 1 && start)
-			{
-				secondes_remain = 0 ;
-				dixieme_remain = 2;
-				nb_pulse++;
-				Count = true;
-			}
-
-			affiche_temps(7,1);
-
-			while(Count == true)
-			{
-				PORTB |= (1 << PIN0);
-				if(time_now - last_time >= 100)// Et que 1/10 sec s'est écoulée
-				{
-					if(--dixieme_remain < 0) // Décrémentation des dixiemes et si il n'y as plus de dixieme...
-					{
-						dixieme_remain = 9;
-						if(--secondes_remain < 0) // Décrémentation des minutes et si il n'y as plus de seconde...
-						{
-							//on réinitalise le compteur
-							secondes_remain = 0;
-							dixieme_remain = 0;
-							//on coupe le relais, on affiche le compteur réinitialisé et on sort de la boulce while()
-							PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
-							affiche_temps(7,1);
-							Count = false;
-							cnt_boucle++;
-						}
-					}
-					affiche_temps(7,1);
-					last_time = time_now;
-				}
-				time_now = millis();
-				if(Count == false & start == false)PORTB &= ~(1 << PIN0);
-			}
-
-			if (cnt_boucle == 1 && start)
-			{
-				lcd.setCursor(5,1);
-				lcd.print("   Mesure  ");
-				delay(1000);
-				capteur_poids = LoadCellReadAverage(2);
-				lcd.setCursor(5,1);
-				lcd.print(" ");
-				load = analogToLoad(capteur_poids) - analogToLoad(init_tare);
-				load = Roundn(load,1);
-				ratio = load / (poids * temps_ratio); //calcul du ratio poids gramme par seconde
-				lcd.setCursor(11, 0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp);
-
-				if (load > poids | ratio < 0.4)
-				{
-					start = false;
-					cnt_boucle = 0;
-					lcd.setCursor(6, 1); lcd.print(" ERREUR # ");
-					error = true;
-					while(error){}
-					lcd.setCursor(5,1); lcd.print("           ");
-					lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp);
-				}
-
-				else
-				{
-					lcd.setCursor(6,1); lcd.print("RATIO :");
-					lcd.setCursor(11, 1); dtostrf(ratio, 5, 1, char_temp);lcd.print(char_temp);
-					delay(1000);
-					lcd.setCursor(5,1); lcd.print("           ");
-					reste = ((poids - load) / ratio);// calcul du temps d'exution de la seconde boucle while
-				}
-			}
-
-			if (cnt_boucle > 1 && start)
-			{
-				lcd.setCursor(5,1);
-				lcd.print("   Mesure  ");
-				delay(1000);
-				capteur_poids = LoadCellReadAverage(2);
-				Serial.println(capteur_poids);
-				lcd.setCursor(5,1);
-				lcd.print(" ");
-				PreviousLoadCompare = load;
-				load = analogToLoad(capteur_poids) - analogToLoad(init_tare);
-				load = Roundn(load,1);
-				lcd.setCursor(11, 0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp);
-
-				if (load >= poids-0.2)
-				{
-					start = false;
-					cnt_boucle = 0;
-					nb_pulse = 0;
-					lcd.setCursor(5,1); lcd.print(" ");
-					lcd.setCursor(9, 1); lcd.print("Stop");
-					error = true;
-					while(error){};
-					lcd.setCursor(5,1); lcd.print(" ");
-					lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp);
-				}
-
-				if (nb_pulse == 4 | load <= PreviousLoadCompare)
-				{
-					start = false;
-					cnt_boucle = 0;
-					nb_pulse = 0;
-					lcd.setCursor(5,1); lcd.print("           ");
-					lcd.setCursor(6, 1); lcd.print(" ERREUR # ");
-					error = true;
-					while(error){};
-					lcd.setCursor(5,1); lcd.print("           ");
-					lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp);
-				}
-
-			}
-			if(!start)
-			{
-				cnt_boucle = 0;
-				nb_pulse = 0;
-			}
-
-		}
-		break;
-		// fonction timer
-		case 1:
-
-		if(FirstLoop == true )
-		{
-			attachInterrupt(1, stop, FALLING);
-			//lcd.clear();
-			start = false;
-			PreviousStart = true;
-			PORTB &= ~(1 << PIN0);
-			lcd.setCursor(0,0);
-			lcd.print("RockyMatic ");
-			lcd.setCursor(0,1);
-			lcd.print("Timer ");
-			secondes_remain = (uint8_t) timer;
-			dixieme_remain = (uint8_t) ((timer - secondes_remain)*10);
-			affiche_temps(7,1);
-			lcd.setCursor(11, 0);
-			dtostrf(load, 5, 1, char_temp);
-			lcd.print(char_temp);
-			PreviousLoad = load;
-			FirstLoop = false;
-		}
-
-		if(start == true && PreviousStart != start)
-		{
-			lcd.setCursor(13,1);
-			lcd.print(" ON ");
-			PreviousStart = start;
-		}
-
-		if(start == false && PreviousStart != start)
-		{
-			lcd.setCursor(13,1);
-			lcd.print("OFF");
-			PORTB &= ~(1 << PIN0);
-			PreviousStart = start;
-		}
-
-		if(timer != PreviousTimer)
-		{
-			secondes_remain = (uint8_t) timer;
-			dixieme_remain = (uint8_t) ((timer - secondes_remain)*10);
-			affiche_temps(7,1);
-			PreviousTimer = timer;
-		}
-
-		if(start == true)
-		{
-			Count = true;
-			while(Count == true)
-			{
-				PORTB |= (1 << PIN0); //digitalWrite(commande_relais, HIGH);
-				if(time_now - last_time >= 100)// Et que 1/10 sec s'est écoulée
-				{
-					if(--dixieme_remain < 0) // Décrémentation des dixiemes et si il n'y as plus de dixieme...
-					{
-						dixieme_remain = 9;
-						if(--secondes_remain < 0) // Décrémentation des minutes et si il n'y as plus de seconde...
-						{
-							//on réinitalise le compteur
-							//secondes_remain = 0;
-							//dixieme_remain = 0;
-							secondes_remain = (uint8_t) timer;
-							dixieme_remain = (uint8_t) ((timer - secondes_remain)*10);
-							//on coupe le relais, on affiche le compteur réinitialisé et on sort de la boulce while()
-							PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
-							affiche_temps(7,1);
-							Count = false;
-							start = false;
-						}
-					}
-					affiche_temps(7,1);
-					last_time = time_now;
-				}
-				time_now = millis();
-			}
-			secondes_remain = (uint8_t) timer;
-			dixieme_remain = (uint8_t) ((timer - secondes_remain)*10);
-			affiche_temps(7,1);
-		}
-		break;
-		//fonction manuel
-		case 2:
-
-		if(FirstLoop == true )
-		{
-			detachInterrupt(1);
-			start = false;
-			PreviousStart = true;
-			PORTB &= ~(1 << PIN0);
-			lcd.setCursor(0,0);
-			lcd.print("RockyMatic ");
-			lcd.setCursor(0,1);
-			lcd.print("Manuel       ");
-			lcd.setCursor(11, 0);
-			dtostrf(load, 5, 1, char_temp);
-			lcd.print(char_temp);
-			PreviousLoad = load;
-			ExecuteOnce = true;
-			FirstLoop = false;
-		}
-
-		if(start == true)
-		{
-			if(PreviousStart != start)
+			if(start == true)
 			{
 				lcd.setCursor(13,1);
 				lcd.print(" ON");
-				PORTB |= (1 << PIN0);//digitalWrite(commande_relais, HIGH);
+				PreviousStart = start;
+
+				if (cnt_boucle == 0 && start)
+				{
+					secondes_remain = (uint8_t) (poids * temps_ratio) ; //timer en seconde reçoit 2/3 de la valeur du poids voulu en grammes
+					dixieme_remain = (uint8_t) (Roundn((poids * temps_ratio) - secondes_remain ,1)*10); //partie decimale 1/10 S
+					Count = true;
+				}
+
+				if (cnt_boucle == 1 && start)
+				{
+					if(reste <= 1)
+					{
+					secondes_remain = 0; //timer en seconde reçoit 2/3 de la valeur du poids voulu en grammes
+					dixieme_remain = 6; //partie decimale 1/10 S
+					Count = true;
+					}
+					else
+					{
+					secondes_remain = (uint8_t) (reste-0.6) ; //timer en seconde reçoit 2/3 de la valeur du poids voulu en grammes
+					dixieme_remain = (uint8_t) (Roundn((reste-0.6) - secondes_remain , 1)*10); //partie decimale 1/10 S
+					Count = true;
+					}
+				}
+
+				if (cnt_boucle > 1 && start)
+				{
+					secondes_remain = 0 ;
+					dixieme_remain = 2;
+					nb_pulse++;
+					Count = true;
+				}
+
+				affiche_temps(7,1);
+
+				while(Count == true)
+				{
+					PORTB |= (1 << PIN0);
+					if(time_now - last_time >= 100)// Et que 1/10 sec s'est écoulée
+					{
+						if(--dixieme_remain < 0) // Décrémentation des dixiemes et si il n'y as plus de dixieme...
+						{
+							dixieme_remain = 9;
+							if(--secondes_remain < 0) // Décrémentation des minutes et si il n'y as plus de seconde...
+							{
+								//on réinitalise le compteur
+								secondes_remain = 0;
+								dixieme_remain = 0;
+								//on coupe le relais, on affiche le compteur réinitialisé et on sort de la boulce while()
+								PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
+								affiche_temps(7,1);
+								Count = false;
+								cnt_boucle++;
+							}
+						}
+						affiche_temps(7,1);
+						last_time = time_now;
+					}
+					time_now = millis();
+					if(Count == false & start == false)PORTB &= ~(1 << PIN0);
+				}
+
+				if (cnt_boucle == 1 && start)
+				{
+					lcd.setCursor(5,1);
+					lcd.print("   Mesure  ");
+					delay(1500);
+					capteur_poids = LoadCellReadAverage(4);
+					lcd.setCursor(5,1);
+					lcd.print(" ");
+					load = analogToLoad(capteur_poids) - analogToLoad(init_tare);
+					load = Roundn(load,1);
+					ratio = load / (poids * temps_ratio); //calcul du ratio poids gramme par seconde
+					lcd.setCursor(11, 0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp);
+
+					if (load > poids | ratio < 0.4)
+					{
+						start = false;
+						cnt_boucle = 0;
+						lcd.setCursor(6, 1); lcd.print(" ERREUR #1");
+						error = true;
+						while(error){}
+						lcd.setCursor(5,1); lcd.print("           ");
+						lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp);
+					}
+
+					else
+					{
+						lcd.setCursor(6,1); lcd.print("RATIO :");
+						lcd.setCursor(11, 1); dtostrf(ratio, 5, 1, char_temp);lcd.print(char_temp);
+						delay(1000);
+						lcd.setCursor(5,1); lcd.print("           ");
+						reste = ((poids - load) / ratio);// calcul du temps d'exution de la seconde boucle while
+					}
+				}
+
+				if (cnt_boucle > 1 && start)
+				{
+					lcd.setCursor(5,1);
+					lcd.print("   Mesure  ");
+					delay(1500);
+					capteur_poids = LoadCellReadAverage(4);
+					lcd.setCursor(5,1);
+					lcd.print(" ");
+					PreviousLoadCompare = load;
+					load = analogToLoad(capteur_poids) - analogToLoad(init_tare);
+					load = Roundn(load,1);
+					lcd.setCursor(11, 0); dtostrf(load, 5, 1, char_temp);lcd.print(char_temp);
+
+					if (load >= poids-0.1)
+					{
+						start = false;
+						cnt_boucle = 0;
+						nb_pulse = 0;
+						//lcd.setCursor(5,1); lcd.print(" ");
+						lcd.setCursor(5, 1); lcd.print("   Stop    ");
+						error = true;
+						while(error){};
+						lcd.setCursor(5, 1); lcd.print("           ");
+						lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp);
+					}
+
+					if (nb_pulse == 6			 | load <= PreviousLoadCompare)
+					{
+						start = false;
+						cnt_boucle = 0;
+						nb_pulse = 0;
+						lcd.setCursor(5,1); lcd.print("           ");
+						lcd.setCursor(6, 1); lcd.print(" ERREUR #2");
+						error = true;
+						while(error){};
+						lcd.setCursor(5,1); lcd.print("           ");
+						lcd.setCursor(7, 1); dtostrf(poids, 4, 1, char_temp); lcd.print(char_temp);
+					}
+
+				}
+				if(!start)
+				{
+					cnt_boucle = 0;
+					nb_pulse = 0;
+				}
+
+			}
+			break;
+			// fonction timer
+			case 1:
+
+			if(FirstLoop == true )
+			{
+				attachInterrupt(1, stop, FALLING);
+				//lcd.clear();
+				start = false;
+				PreviousStart = true;
+				PORTB &= ~(1 << PIN0);
+				lcd.setCursor(0,0);
+				lcd.print("RockyMatic ");
+				lcd.setCursor(0,1);
+				lcd.print("Timer ");
+				secondes_remain = (uint8_t) timer;
+				dixieme_remain = (uint8_t) ((timer - secondes_remain)*10);
+				affiche_temps(7,1);
+				lcd.setCursor(11, 0);
+				dtostrf(load, 5, 1, char_temp);
+				lcd.print(char_temp);
+				PreviousLoad = load;
+				FirstLoop = false;
+			}
+
+			if(start == true && PreviousStart != start)
+			{
+				lcd.setCursor(13,1);
+				lcd.print(" ON ");
 				PreviousStart = start;
 			}
-			if(millis() - PressLT > TimeLock && ExecuteOnce)
+
+			if(start == false && PreviousStart != start)
 			{
-				lcd.setCursor(8,1);
-				lcd.print("Lock");
-				ExecuteOnce = false;
+				lcd.setCursor(13,1);
+				lcd.print("OFF");
+				PORTB &= ~(1 << PIN0);
+				PreviousStart = start;
 			}
-		}
-		else if(start == false && PreviousStart != start)
-		{
-			lcd.setCursor(7,1);
-			lcd.print("      OFF");
-			PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
-			PreviousStart = start;
-			ExecuteOnce = true;
-		}
 
-		break;
-		//menu de maintenance
-		case 3:
-
-		if(FirstLoop == true )
-		{
-			attachInterrupt(1, stop, FALLING);
-			start = false;
-			PreviousStart = true;
-			PORTB &= ~(1 << PIN0);
-			lcd.setCursor(15,0);
-			lcd.print("P");
-			secondes_remain = (uint8_t) timer_purge;
-			dixieme_remain = (uint8_t) ((timer_purge - secondes_remain)*10);
-			FirstLoop = false;
-			start = true;
-		}
-		if(start == true)
-		{
-			Count = true;
-			while(Count == true)
+			if(timer != PreviousTimer)
 			{
-				PORTB |= (1 << PIN0); //digitalWrite(commande_relais, HIGH);
-				if(time_now - last_time >= 100)// Et que 1/10 sec s'est écoulée
+				secondes_remain = (uint8_t) timer;
+				dixieme_remain = (uint8_t) ((timer - secondes_remain)*10);
+				affiche_temps(7,1);
+				PreviousTimer = timer;
+			}
+
+			if(start == true)
+			{
+				Count = true;
+				while(Count == true)
 				{
-					if(--dixieme_remain < 0) // Décrémentation des dixiemes et si il n'y as plus de dixieme...
+					PORTB |= (1 << PIN0); //digitalWrite(commande_relais, HIGH);
+					if(time_now - last_time >= 100)// Et que 1/10 sec s'est écoulée
 					{
-						dixieme_remain = 9;
-						if(--secondes_remain < 0) // Décrémentation des minutes et si il n'y as plus de seconde...
+						if(--dixieme_remain < 0) // Décrémentation des dixiemes et si il n'y as plus de dixieme...
 						{
-							secondes_remain = (uint8_t) timer_purge;
-							dixieme_remain = (uint8_t) ((timer_purge - secondes_remain)*10);
-							//on coupe le relais, on affiche le compteur réinitialisé et on sort de la boulce while()
-							PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
-							Count = false;
-							start = false;
+							dixieme_remain = 9;
+							if(--secondes_remain < 0) // Décrémentation des minutes et si il n'y as plus de seconde...
+							{
+								//on réinitalise le compteur
+								//secondes_remain = 0;
+								//dixieme_remain = 0;
+								secondes_remain = (uint8_t) timer;
+								dixieme_remain = (uint8_t) ((timer - secondes_remain)*10);
+								//on coupe le relais, on affiche le compteur réinitialisé et on sort de la boulce while()
+								PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
+								affiche_temps(7,1);
+								Count = false;
+								start = false;
+							}
 						}
+						affiche_temps(7,1);
+						last_time = time_now;
 					}
-					last_time = time_now;
+					time_now = millis();
 				}
-				time_now = millis();
+				secondes_remain = (uint8_t) timer;
+				dixieme_remain = (uint8_t) ((timer - secondes_remain)*10);
+				affiche_temps(7,1);
 			}
-			secondes_remain = (uint8_t) timer_purge;
-			dixieme_remain = (uint8_t) ((timer_purge - secondes_remain)*10);
-			menu = oldmenu;
-			lcd.setCursor(15,0);
-			lcd.print(" ");
-			detachInterrupt(1);
-		}
+			break;
+			//fonction manuel
+			case 2:
 
-		break;
-
-		//default:
-		// if nothing else matches, do the default
-		// default is optional
-
-	}
-
-
-	Serial.print("temps1 : ");
-	Serial.println(millis()-debut);
-
-
-
-	//lecture de l'état actuel des boutons => ReadSWx est défini par un #define
-	StateSW1 = ReadSW1; //StateSW1 = digitalRead(4);
-	StateSW2 = ReadSW2; //StateSW2 = digitalRead(5);
-	StateSW3 = ReadSW3; //StateSW3 = digitalRead(6);
-	StateSW4 = ReadSW4; //...
-	StateSW5 = ReadSW5;
-	StateSW6 = ReadSW6;
-
-	if (StateSW1 != LastStateSW1)
-	{
-		LastStateSW1 = StateSW1;
-		if (LastStateSW1)
-		{
-			DoNotChangeMenu = false;
-			PressLT = millis();
-		}
-		if (!LastStateSW1 && !DoNotChangeMenu)
-		{
-			menu = ++menu&3;
-			if(menu == 3)menu = 0;
-			FirstLoop = true;//permet d'executer une morceau de code a la première execution
-		}
-	}
-	if (StateSW1 == LastStateSW1 & StateSW1)
-	{
-		if(millis()-PressLT > 2000 && menu !=3) {oldmenu = menu; menu = 3; FirstLoop = true; DoNotChangeMenu = true; PressLT = millis();}
-
-		if(menu == 0)
-		{
-			if(StateSW2) {DoNotChangeMenu = true; poids = EEPROM.readFloat(addr_poids);}
-			if(StateSW3) {DoNotChangeMenu = true; if(poids != EEPROM.readFloat(addr_poids)){EEPROM.writeFloat(addr_poids, poids);Serial.println("Mise a jour de l'eeprom");}}
-		}
-		if(menu == 1)
-		{
-			if(StateSW2) {DoNotChangeMenu = true; timer = EEPROM.readFloat(addr_timer);}
-			if(StateSW3) {DoNotChangeMenu = true; if(timer != EEPROM.readFloat(addr_timer)){EEPROM.writeFloat(addr_timer, timer);Serial.println("Mise a jour de l'eeprom");}}
-		}
-		if(menu == 2)
-		{
-			if(StateSW2) {DoNotChangeMenu = true;}
-			if(StateSW3) {DoNotChangeMenu = true;}
-		}
-	}
-
-	if (StateSW2 != LastStateSW2 && !LastStateSW1)
-	{
-		LastStateSW2 = StateSW2;
-		if (LastStateSW2)
-		{
-			if(menu == 0){poids += 0.5;}
-			if(menu == 1){timer += 0.1;}
-			SW2andSW3 = true;
-			PressLT = millis();
-		}
-		if (!LastStateSW2)
-		{
-			SW2andSW3 = false;
-		}
-		InterAccelTime_init = millis();
-	}
-	else if (StateSW2 == LastStateSW2 & StateSW2)
-	{
-		PressTD = millis()- PressLT;
-		if(PressTD > 1000 & PressTD <1500) Inter = InterAccelValue_1;
-		if(PressTD > 1500 & PressTD <2500) Inter = InterAccelValue_2;
-		if(PressTD > 2500 & PressTD <4000) Inter = InterAccelValue_3;
-		if(PressTD > 4000) Inter = InterAccelValue_4;
-		InterAccelTime_diff = millis() - InterAccelTime_init;
-		if(InterAccelTime_diff > Inter)
-		{
-			if(menu == 0){poids += 0.5;}
-			if(menu == 1){timer += 0.1;}
-			InterAccelTime_init = millis();
-		}
-		Inter = Inter_init;
-	}
-
-	if (StateSW3 != LastStateSW3 && !LastStateSW1)
-	{
-		LastStateSW3 = StateSW3;
-		if (LastStateSW3)
-		{
-			if(menu == 0){poids -= 0.5;}
-			if(menu == 1 & timer >0.1){timer -= 0.1;}
-			SW2andSW3 = true;
-			PressLT = millis();
-		}
-		if (!LastStateSW3)
-		{
-			SW2andSW3 = false;
-		}
-		InterAccelTime_init = millis();
-	}
-
-	else if (StateSW3 == LastStateSW3 & StateSW3)
-	{
-		PressTD = millis()- PressLT;
-		if(PressTD > 1000 & PressTD <1500) Inter = InterAccelValue_1;
-		if(PressTD > 1500 & PressTD <2500) Inter = InterAccelValue_2;
-		if(PressTD > 2500 & PressTD <4000) Inter = InterAccelValue_3;
-		if(PressTD > 4000) Inter = InterAccelValue_4;
-		InterAccelTime_diff = millis() - InterAccelTime_init;
-
-		if(InterAccelTime_diff > Inter)
-		{
-			if(menu == 0){poids -= 0.5;}
-			if(menu == 1 & timer > 0){timer -= 0.1;}
-			InterAccelTime_init = millis();
-		}
-		Inter = Inter_init;
-	}
-
-
-	//LastStateSW4 Peut etre utilisé pour une interruption sur PIND3
-	//Si l'état du bouton SW4 à changé et que SW1 n'est pas pressé
-	if (StateSW4 != LastStateSW4 && !LastStateSW1)
-	{
-		LastStateSW4 = StateSW4;
-		if (LastStateSW4)//quand le bouton est préssé
-		{
-			if(menu == 2){start = true;}
-			PressLT = millis();//on initialise le compteur "bouton pressé depuis"
-		}
-		if (!LastStateSW4)//quand le bouton est relaché
-		{
-			if(menu == 0){if(!error)start = true;}
-			if(menu == 1){start = true;}
-			if(menu == 2)
+			if(FirstLoop == true )
 			{
-				//Si "bouton pressé depuis" est inférieur à TimeLocke on coupe la sortie sinon on Lock la sortie => voir partie code manuel
-				if(millis()-PressLT < TimeLock) {start = false; PressLT = millis();}
+				detachInterrupt(1);
+				start = false;
+				PreviousStart = true;
+				PORTB &= ~(1 << PIN0);
+				lcd.setCursor(0,0);
+				lcd.print("RockyMatic ");
+				lcd.setCursor(0,1);
+				lcd.print("Manuel       ");
+				lcd.setCursor(11, 0);
+				dtostrf(load, 5, 1, char_temp);
+				lcd.print(char_temp);
+				PreviousLoad = load;
+				ExecuteOnce = true;
+				FirstLoop = false;
 			}
-			StopByInterrupt = false;//permet de savoir si une boucle à été stopée par l'interruption du SW4
+
+			if(start == true)
+			{
+				if(PreviousStart != start)
+				{
+					lcd.setCursor(13,1);
+					lcd.print(" ON");
+					PORTB |= (1 << PIN0);//digitalWrite(commande_relais, HIGH);
+					PreviousStart = start;
+				}
+				if(millis() - PressLT > TimeLock && ExecuteOnce)
+				{
+					lcd.setCursor(8,1);
+					lcd.print("Lock");
+					ExecuteOnce = false;
+				}
+			}
+			else if(start == false && PreviousStart != start)
+			{
+				lcd.setCursor(7,1);
+				lcd.print("      OFF");
+				PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
+				PreviousStart = start;
+				ExecuteOnce = true;
+			}
+
+			break;
+			//menu de maintenance
+			case 3:
+
+			if(FirstLoop == true )
+			{
+				attachInterrupt(1, stop, FALLING);
+				start = false;
+				PreviousStart = true;
+				PORTB &= ~(1 << PIN0);
+				lcd.setCursor(15,0);
+				lcd.print("P");
+				secondes_remain = (uint8_t) timer_purge;
+				dixieme_remain = (uint8_t) ((timer_purge - secondes_remain)*10);
+				FirstLoop = false;
+				start = true;
+			}
+			if(start == true)
+			{
+				Count = true;
+				while(Count == true)
+				{
+					PORTB |= (1 << PIN0); //digitalWrite(commande_relais, HIGH);
+					if(time_now - last_time >= 100)// Et que 1/10 sec s'est écoulée
+					{
+						if(--dixieme_remain < 0) // Décrémentation des dixiemes et si il n'y as plus de dixieme...
+						{
+							dixieme_remain = 9;
+							if(--secondes_remain < 0) // Décrémentation des minutes et si il n'y as plus de seconde...
+							{
+								secondes_remain = (uint8_t) timer_purge;
+								dixieme_remain = (uint8_t) ((timer_purge - secondes_remain)*10);
+								//on coupe le relais, on affiche le compteur réinitialisé et on sort de la boulce while()
+								PORTB &= ~(1 << PIN0); // equivalent digitalWrite(commande_relais, LOW); en AVRC
+								Count = false;
+								start = false;
+							}
+						}
+						last_time = time_now;
+					}
+					time_now = millis();
+				}
+				secondes_remain = (uint8_t) timer_purge;
+				dixieme_remain = (uint8_t) ((timer_purge - secondes_remain)*10);
+				menu = oldmenu;
+				lcd.setCursor(15,0);
+				lcd.print(" ");
+				detachInterrupt(1);
+			}
+
+			break;
+
+			//default:
+			// if nothing else matches, do the default
+			// default is optional
+
 		}
-	}
-	//Si l'état du bouton SW4 à changé et que SW1 est pressé
-	if (StateSW4 != LastStateSW4 && LastStateSW1)
-	{
-		LastStateSW4 = StateSW4;
-		if (LastStateSW4)//quand le bouton est préssé
+
+
+		//Serial.print("temps1 : ");
+		//Serial.println(millis()-debut);
+
+
+
+		//lecture de l'état actuel des boutons => ReadSWx est défini par un #define
+		StateSW1 = ReadSW1; //StateSW1 = digitalRead(4);
+		StateSW2 = ReadSW2; //StateSW2 = digitalRead(5);
+		StateSW3 = ReadSW3; //StateSW3 = digitalRead(6);
+		StateSW4 = ReadSW4; //...
+		StateSW5 = ReadSW5;
+		StateSW6 = ReadSW6;
+
+		if (StateSW1 != LastStateSW1)
 		{
+			LastStateSW1 = StateSW1;
+			if (LastStateSW1)
+			{
+				DoNotChangeMenu = false;
+				PressLT = millis();
+			}
+			if (!LastStateSW1 && !DoNotChangeMenu)
+			{
+				menu = ++menu&3;
+				if(menu == 3)menu = 0;
+				FirstLoop = true;//permet d'executer une morceau de code a la première execution
+			}
+		}
+		if (StateSW1 == LastStateSW1 & StateSW1)
+		{
+			if(millis()-PressLT > 2000 && menu !=3) {oldmenu = menu; menu = 3; FirstLoop = true; DoNotChangeMenu = true; PressLT = millis();}
+
 			if(menu == 0)
 			{
-				DoNotChangeMenu = true;
-				init_tare = tare();
-				LastStateSW4 = 0;
+				if(StateSW2) {DoNotChangeMenu = true; poids = EEPROM.readFloat(addr_poids);}
+				if(StateSW3) {DoNotChangeMenu = true; if(poids != EEPROM.readFloat(addr_poids)){EEPROM.writeFloat(addr_poids, poids);}}
 			}
 			if(menu == 1)
 			{
-				DoNotChangeMenu = true;
-				init_tare = tare();
-				LastStateSW4 = 0;
+				if(StateSW2) {DoNotChangeMenu = true; timer = EEPROM.readFloat(addr_timer);}
+				if(StateSW3) {DoNotChangeMenu = true; if(timer != EEPROM.readFloat(addr_timer)){EEPROM.writeFloat(addr_timer, timer);}}
 			}
 			if(menu == 2)
 			{
-				DoNotChangeMenu = true;
-				init_tare = tare();
-				LastStateSW4 = 0;
+				if(StateSW2) {DoNotChangeMenu = true;}
+				if(StateSW3) {DoNotChangeMenu = true;}
 			}
 		}
-		if (LastStateSW4)//quand le bouton est relaché
+
+		if (StateSW2 != LastStateSW2 && !LastStateSW1)
 		{
+			LastStateSW2 = StateSW2;
+			if (LastStateSW2)
+			{
+				if(menu == 0){poids += 0.5;}
+				if(menu == 1){timer += 0.1;}
+				SW2andSW3 = true;
+				PressLT = millis();
+			}
+			if (!LastStateSW2)
+			{
+				SW2andSW3 = false;
+			}
+			InterAccelTime_init = millis();
 		}
+		else if (StateSW2 == LastStateSW2 & StateSW2)
+		{
+			PressTD = millis()- PressLT;
+			if(PressTD > 1000 & PressTD <1500) Inter = InterAccelValue_1;
+			if(PressTD > 1500 & PressTD <2500) Inter = InterAccelValue_2;
+			if(PressTD > 2500 & PressTD <4000) Inter = InterAccelValue_3;
+			if(PressTD > 4000) Inter = InterAccelValue_4;
+			InterAccelTime_diff = millis() - InterAccelTime_init;
+			if(InterAccelTime_diff > Inter)
+			{
+				if(menu == 0){poids += 0.5;}
+				if(menu == 1){timer += 0.1;}
+				InterAccelTime_init = millis();
+			}
+			Inter = Inter_init;
+		}
+
+		if (StateSW3 != LastStateSW3 && !LastStateSW1)
+		{
+			LastStateSW3 = StateSW3;
+			if (LastStateSW3)
+			{
+				if(menu == 0){poids -= 0.5;}
+				if(menu == 1 & timer >0.1){timer -= 0.1;}
+				SW2andSW3 = true;
+				PressLT = millis();
+			}
+			if (!LastStateSW3)
+			{
+				SW2andSW3 = false;
+			}
+			InterAccelTime_init = millis();
+		}
+
+		else if (StateSW3 == LastStateSW3 & StateSW3)
+		{
+			PressTD = millis()- PressLT;
+			if(PressTD > 1000 & PressTD <1500) Inter = InterAccelValue_1;
+			if(PressTD > 1500 & PressTD <2500) Inter = InterAccelValue_2;
+			if(PressTD > 2500 & PressTD <4000) Inter = InterAccelValue_3;
+			if(PressTD > 4000) Inter = InterAccelValue_4;
+			InterAccelTime_diff = millis() - InterAccelTime_init;
+
+			if(InterAccelTime_diff > Inter)
+			{
+				if(menu == 0){poids -= 0.5;}
+				if(menu == 1 & timer > 0){timer -= 0.1;}
+				InterAccelTime_init = millis();
+			}
+			Inter = Inter_init;
+		}
+
+
+		//LastStateSW4 Peut etre utilisé pour une interruption sur PIND3
+		//Si l'état du bouton SW4 à changé et que SW1 n'est pas pressé
+		if (StateSW4 != LastStateSW4 && !LastStateSW1)
+		{
+			LastStateSW4 = StateSW4;
+			if (LastStateSW4)//quand le bouton est préssé
+			{
+				if(menu == 2){start = true;}
+				PressLT = millis();//on initialise le compteur "bouton pressé depuis"
+			}
+			if (!LastStateSW4)//quand le bouton est relaché
+			{
+				if(menu == 0){if(!error)start = true;}
+				if(menu == 1){start = true;}
+				if(menu == 2)
+				{
+					//Si "bouton pressé depuis" est inférieur à TimeLocke on coupe la sortie sinon on Lock la sortie => voir partie code manuel
+					if(millis()-PressLT < TimeLock) {start = false; PressLT = millis();}
+				}
+				StopByInterrupt = false;//permet de savoir si une boucle à été stopée par l'interruption du SW4
+			}
+		}
+		//Si l'état du bouton SW4 à changé et que SW1 est pressé
+		if (StateSW4 != LastStateSW4 && LastStateSW1)
+		{
+			LastStateSW4 = StateSW4;
+			if (LastStateSW4)//quand le bouton est préssé
+			{
+				if(menu == 0)
+				{
+					DoNotChangeMenu = true;
+					init_tare = tare();
+					LastStateSW4 = 0;
+				}
+				if(menu == 1)
+				{
+					DoNotChangeMenu = true;
+					init_tare = tare();
+					LastStateSW4 = 0;
+				}
+				if(menu == 2)
+				{
+					DoNotChangeMenu = true;
+					init_tare = tare();
+					LastStateSW4 = 0;
+				}
+			}
+			if (LastStateSW4)//quand le bouton est relaché
+			{
+			}
+		}
+		//Serial.print("temps2 : ");
+		//Serial.println(millis()-debut);
+		
 	}
-	Serial.print("temps2 : ");
-	Serial.println(millis()-debut);
-	
-}
 
-float analogToLoad(float analogval)
-{
-	float load_temp;
-	float loadA = 00.0; // grammes
-	int analogvalA = 9974; // analog reading taken with load A on the load cell
-	float loadB = 134.5; // grammes
-	int analogvalB = 26916; // analog reading taken with load B on the load cell
-	/*
-	float loadA = 00.0; // grammes
-	int analogvalA = 3930; // analog reading taken with load A on the load cell
-	float loadB = 300.0; // grammes
-	int analogvalB = 25907; // analog reading taken with load B on the load cell
-	*/
-	load_temp = (analogval - analogvalA) * (loadB - loadA) / (analogvalB - analogvalA) + loadA;
-	return load_temp;
-}
-
-
-int16_t tare()
-{
-	uint16_t delay_wait = 1000;
-	long Tare_Moyenne = 0;
-	lcd.clear();
-	lcd.setCursor(3,0);
-	lcd.print("RockyMatic");
-	lcd.setCursor(1,1);
-	lcd.print("Tare en cours");
-	delay(delay_wait);
-
-	for(int cnt=0; cnt < samplesBuffer; cnt++)
+	float analogToLoad(float analogval)
 	{
-		analogSamplesAverage = MovingAverage(AnalogReadAverage(nSample_Tare));
+		float load_temp;
+		float loadA = 00.0; // grammes
+		int analogvalA = 9974; // analog reading taken with load A on the load cell
+		float loadB = 134.5; // grammes
+		int analogvalB = 26916; // analog reading taken with load B on the load cell
+		/*
+		float loadA = 00.0; // grammes
+		int analogvalA = 3930; // analog reading taken with load A on the load cell
+		float loadB = 300.0; // grammes
+		int analogvalB = 25907; // analog reading taken with load B on the load cell
+		*/
+		load_temp = (analogval - analogvalA) * (loadB - loadA) / (analogvalB - analogvalA) + loadA;
+		return load_temp;
 	}
 
-	lcd.clear();
-	FirstLoop = true;
-	return analogSamplesAverage;
-}
 
-void affiche_temps(int colonne, int ligne)
-{
-	char tmp[6];
-	sprintf(tmp, "%2d.%d", secondes_remain, dixieme_remain);
-	if(secondes_remain < 100){lcd.setCursor(colonne + 4,ligne);lcd.print(" ");}
-	lcd.setCursor(colonne,ligne);
-	lcd.print(tmp);
-	
-}
-
-/**************************************************************************
-***		Modif pour optimisation du poids => déclaratino de fonction		***
-**************************************************************************/
-uint16_t MovingAverage(int16_t newSample)
-{
-	if(lastSampleIndex != samplesBuffer-1)
+	int16_t tare()
 	{
-		lastSampleIndex ++; // Move to next index
-		oldSample = analogSamples[lastSampleIndex]; // Get old analog sample
-		analogSamples[lastSampleIndex] = newSample; // Add new analog sample
+		uint16_t delay_wait = 1000;
+		long Tare_Moyenne = 0;
+		lcd.clear();
+		lcd.setCursor(3,0);
+		lcd.print("RockyMatic");
+		lcd.setCursor(1,1);
+		lcd.print("Tare en cours");
+		delay(delay_wait);
+
+		for(int cnt=0; cnt < samplesBuffer; cnt++)
+		{
+			analogSamplesAverage = MovingAverage(AnalogReadAverage(nSample_Tare));
+		}
+
+		lcd.clear();
+		FirstLoop = true;
+		return analogSamplesAverage;
 	}
-	if(lastSampleIndex == samplesBuffer - 1 )
+
+	void affiche_temps(int colonne, int ligne)
 	{
-		oldSample = analogSamples[0]; // Get old analog sample from start of buffer
-		analogSamples[0] = newSample; // Add new analog sample to start of buffer
-		lastSampleIndex = 0; // Record sample index currently working on
+		char tmp[6];
+		sprintf(tmp, "%2d.%d", secondes_remain, dixieme_remain);
+		if(secondes_remain < 100){lcd.setCursor(colonne + 4,ligne);lcd.print(" ");}
+		lcd.setCursor(colonne,ligne);
+		lcd.print(tmp);
+		
 	}
-	sampleBufferTotal += newSample; // Add new analog sample
-	sampleBufferTotal -= oldSample; // Subtract oldest analog sample
-	return sampleBufferTotal >> 8; // Return average analog sample reading
-}
 
-int16_t LoadCellReadAverage(uint8_t NSample)
-{
-	lastSampleIndex = 0;
-	for(int cnt=0; cnt < samplesBuffer; cnt++)
+	/**************************************************************************
+	***		Modif pour optimisation du poids => déclaratino de fonction		***
+	**************************************************************************/
+	uint16_t MovingAverage(int16_t newSample)
 	{
-		analogSamplesAverage = MovingAverage(AnalogReadAverage(NSample));
+		if(lastSampleIndex != samplesBuffer-1)
+		{
+			lastSampleIndex ++; // Move to next index
+			oldSample = analogSamples[lastSampleIndex]; // Get old analog sample
+			analogSamples[lastSampleIndex] = newSample; // Add new analog sample
+		}
+		if(lastSampleIndex == samplesBuffer - 1 )
+		{
+			oldSample = analogSamples[0]; // Get old analog sample from start of buffer
+			analogSamples[0] = newSample; // Add new analog sample to start of buffer
+			lastSampleIndex = 0; // Record sample index currently working on
+		}
+		sampleBufferTotal += newSample; // Add new analog sample
+		sampleBufferTotal -= oldSample; // Subtract oldest analog sample
+		return sampleBufferTotal >> 8; // Return average analog sample reading
 	}
-	return analogSamplesAverage;
-}
 
-uint16_t AnalogReadAverage(uint8_t NSample)
-{
-	uint8_t BitShift;
-	long AnalogReadAverage = 0;
-
-	if(NSample == 2) BitShift = 1;
-	else if(NSample == 4) BitShift = 2;
-	else if(NSample == 8) BitShift = 3;
-	else if(NSample == 16) BitShift = 4;
-	else {NSample = 1;BitShift = 0;}
-
-	for(uint8_t i=0; i<NSample; i++)
+	int16_t LoadCellReadAverage(uint8_t NSample)
 	{
-		AnalogReadAverage += LoadCellRead;
+		lastSampleIndex = 0;
+		for(int cnt=0; cnt < samplesBuffer; cnt++)
+		{
+			analogSamplesAverage = MovingAverage(AnalogReadAverage(NSample));
+		}
+		return analogSamplesAverage;
 	}
-	return AnalogReadAverage >> BitShift;
-}
-/**************************************************************************
-***		Modif pour optimisation du poids => FIN déclaratino de fonction	***
-**************************************************************************/
+
+	uint16_t AnalogReadAverage(uint8_t NSample)
+	{
+		uint8_t BitShift;
+		long AnalogReadAverage = 0;
+
+		if(NSample == 2) BitShift = 1;
+		else if(NSample == 4) BitShift = 2;
+		else if(NSample == 8) BitShift = 3;
+		else if(NSample == 16) BitShift = 4;
+		else {NSample = 1;BitShift = 0;}
+
+		for(uint8_t i=0; i<NSample; i++)
+		{
+			AnalogReadAverage += LoadCellRead;
+		}
+		return AnalogReadAverage >> BitShift;
+	}
+	/**************************************************************************
+	***		Modif pour optimisation du poids => FIN déclaratino de fonction	***
+	**************************************************************************/
 
 
-/**************************************************************************
-***																		***
-***				Modif pour optimisation du poids => Around 				***
-***																		***
-***************************************************************************/
+	/**************************************************************************
+	***																		***
+	***				Modif pour optimisation du poids => Around 				***
+	***																		***
+	***************************************************************************/
 
-double GetDecExp(int nDec)
-{
-	double dRet;
-	double ad[6]={1.,10.,100.,1000.,10000.,100000.};
+	double GetDecExp(int nDec)
+	{
+		double dRet;
+		double ad[6]={1.,10.,100.,1000.,10000.,100000.};
 
-	if(nDec>=0 && nDec<=5) return(ad[nDec]);
-	dRet=ad[5];
-	for(int i=1;i<nDec-4;i++) dRet*=10.;
-	return floor(dRet);
-}
+		if(nDec>=0 && nDec<=5) return(ad[nDec]);
+		dRet=ad[5];
+		for(int i=1;i<nDec-4;i++) dRet*=10.;
+		return floor(dRet);
+	}
 
-double Roundn(double dValue,int nDecimales)
-{
-	if (nDecimales<0 || dValue==0.) return(dValue);
+	double Roundn(double dValue,int nDecimales)
+	{
+		if (nDecimales<0 || dValue==0.) return(dValue);
 
-	double dSeuil =(dValue<0.?-.5:.5);
+		double dSeuil =(dValue<0.?-.5:.5);
 
-	double dExp=GetDecExp(nDecimales);
+		double dExp=GetDecExp(nDecimales);
 
-	double dCalc = (((dValue*dExp)+dSeuil));
+		double dCalc = (((dValue*dExp)+dSeuil));
 
-	if(dValue<0.)
-	return(ceil(dCalc)/dExp);
-	else
-	return(floor(dCalc)/dExp);
-}
+		if(dValue<0.)
+		return(ceil(dCalc)/dExp);
+		else
+		return(floor(dCalc)/dExp);
+	}
 
-/**************************************************************************
-***																		***
-***			Modif pour optimisation du poids => Fin Around				***
-***																		***
-***************************************************************************/
-
-
+	/**************************************************************************
+	***																		***
+	***			Modif pour optimisation du poids => Fin Around				***
+	***																		***
+	***************************************************************************/
 
 
 
-/**********************************************************
-**														 **
-**	 INTERRUPT FONCTION ON PIND3 => arduino pin 3 (int1) **
-**														 **
-**********************************************************/
 
-void stop()
-{
-	StopByInterrupt = true ;
-	Count = false;
-	start = false;
-	error = false;
-	PORTB &= ~(1 << PIN0);
 
-}
+	/**********************************************************
+	**														 **
+	**	 INTERRUPT FONCTION ON PIND3 => arduino pin 3 (int1) **
+	**														 **
+	**********************************************************/
+
+	void stop()
+	{
+		StopByInterrupt = true ;
+		Count = false;
+		start = false;
+		error = false;
+		PORTB &= ~(1 << PIN0);
+
+	}
 
